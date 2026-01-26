@@ -1,0 +1,12 @@
+{
+  "Id": "ModName",
+  "DisplayName": "Mod Info",
+  "Author": "Mod Author",
+  "Version": "1.0.0",
+  "ManagerVersion": "0.27.0",
+  "Requirements": [],
+  "AssemblyName": "ModName.dll",
+  "EntryMethod": "ModNamespace.Main.Load",
+  "HomePage": "",
+  "Repository": ""
+}
