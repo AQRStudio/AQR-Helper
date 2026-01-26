@@ -49,7 +49,7 @@ MonoBehaviour:
   assetBundles:
   - assetBundleName: scenes.assets
     assets:
-    - {fileID: 102900000, guid: 9fc0d4010bbf28b4594072e72b8655ab, type: 3}
+    - {fileID: 102900000, guid: 466aeb2af19948c48b6341f3e0b47e49, type: 3}
   - assetBundleName: resources.assets
     assets:
     - {fileID: 102900000, guid: 4cd455cd88666934fafe0071cd1b989d, type: 3}
