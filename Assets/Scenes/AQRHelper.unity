@@ -433,7 +433,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 823582.94}
+  m_AnchoredPosition: {x: 0, y: 838715.44}
   m_SizeDelta: {x: 0, y: 1101.1503}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &198429976
@@ -4294,6 +4294,9 @@ MonoBehaviour:
   userinfoPanel: {fileID: 1943542458}
   LoginButton: {fileID: 1943542462}
   UserNameText: {fileID: 940732928}
+  avatarImage1: {fileID: 699396921}
+  avatarImage2: {fileID: 1483611594}
+  defaultAvatar: {fileID: 2800000, guid: f929c2468a9bac745b3c89583344ac6e, type: 3}
   isOpen: 0
 --- !u!1 &1750181097
 GameObject:
