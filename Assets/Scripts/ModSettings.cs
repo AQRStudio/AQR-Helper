@@ -2,7 +2,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace ModNamespace
+namespace AQRHelper
 {
     /// <summary>
     /// Mod settings class

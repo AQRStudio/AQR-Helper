@@ -3,7 +3,7 @@ using HarmonyLib;
 using UnityEngine;
 using UnityModManagerNet;
 
-namespace ModNamespace
+namespace AQRHelper
 {
     /// <summary>
     /// Main entry point for the ADOFAI UMM Mod
@@ -75,7 +75,7 @@ namespace ModNamespace
             else
             {
                 modEntry.Logger.Log("Mod disabled / Mod 已禁用");
-                Harmony?.UnpatchAll();
+                Harmony?.UnpatchSelf();
                 scenesBundle.Unload(true);
                 resourcesBundle.Unload(true);
             }
