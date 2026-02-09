@@ -1,10 +1,12 @@
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 using TMPro;
 using RhythmCafe.Level;
 using Newtonsoft.Json;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 
 public class ScrLevelList : MonoBehaviour
 {
@@ -15,21 +17,18 @@ public class ScrLevelList : MonoBehaviour
     public ScrollRect scrollRect;
 
     [Header("Settings")]
-    public int perPage = 15;
+    public int pageSize = 15;
     public float searchDelay = 0.5f;
     public float loadMoreThreshold = 0.1f;
     public int instantiatePerFrame = 2;
 
-    private const string API_URL_DOMESTIC = "https://cafe.rhythmdoctor.top/api/get_chartlist.php";
-    private const string API_URL_FOREIGN = "https://orchardb.fly.dev/typesense/collections/levels/documents/search";
-    private const string API_KEY = "nicolebestgirl";
-    
+    private const string API_URL = "https://api.azusa.site/levels/search";
+
     private List<GameObject> cardInstances = new List<GameObject>();
     private Queue<GameObject> cardPool = new Queue<GameObject>();
     private Coroutine searchCoroutine;
     private Coroutine populateCoroutine;
     private int currentPage = 1;
-    private int totalFound = 0;
     private bool isLoading = false;
     private bool hasMoreData = true;
     private string currentQuery = "";
@@ -92,79 +91,78 @@ public class ScrLevelList : MonoBehaviour
         StartCoroutine(FetchLevels(currentQuery, currentPage, true));
     }
 
-    private IEnumerator FetchLevels(string query, int page, bool append)
+    private IEnumerator FetchLevels(string query, int pageNum, bool append)
     {
         isLoading = true;
+        ScrAlert.Show("加载中...", false);
 
-        // 只有在没有下载任务时才显示加载提示
-        bool showAlert = !ScrLevelCard.IsAnyDownloading;
-        if (showAlert)
-            ScrAlert.Show("加载中...", false);
-
-        string queryBy = "song,authors,artist,tags,description";
-        string queryByWeights = "12,8,6,5,4";
-        string facetBy = "authors,tags,source,difficulty,artist";
-        string maxFacetValues = "10";
-        string numTypos = "2,1,1,1,0";
-        string sortBy = "_text_match:desc,indexed:desc,last_updated:desc";
-        string filterBy = "approval:=[-1..20]";
-
-        bool useDomestic = ScrSettings.UseDomesticApi;
-        string baseUrl = useDomestic ? API_URL_DOMESTIC : API_URL_FOREIGN;
-
-        string url = $"{baseUrl}?q={UnityEngine.Networking.UnityWebRequest.EscapeURL(query)}" +
-            $"&page={page}" +
-            $"&per_page={perPage}" +
-            $"&query_by={UnityEngine.Networking.UnityWebRequest.EscapeURL(queryBy)}" +
-            $"&query_by_weights={UnityEngine.Networking.UnityWebRequest.EscapeURL(queryByWeights)}" +
-            $"&facet_by={UnityEngine.Networking.UnityWebRequest.EscapeURL(facetBy)}" +
-            $"&max_facet_values={maxFacetValues}" +
-            $"&num_typos={UnityEngine.Networking.UnityWebRequest.EscapeURL(numTypos)}" +
-            $"&sort_by={UnityEngine.Networking.UnityWebRequest.EscapeURL(sortBy)}" +
-            $"&filter_by={UnityEngine.Networking.UnityWebRequest.EscapeURL(filterBy)}";
-
-        var request = UnityEngine.Networking.UnityWebRequest.Get(url);
-
-        // 国外 API 需要添加 API Key
-        if (!useDomestic)
+        var requestBody = new LevelSearchRequest
         {
-            request.SetRequestHeader("x-typesense-api-key", API_KEY);
-        }
-        yield return request.SendWebRequest();
+            Query = query ?? "",
+            Filters = new LevelFilters
+            {
+                Difficulties = new List<string>(),
+                Qualities = new List<string>(),
+                TagIds = new List<int>()
+            },
+            PageNum = pageNum,
+            PageSize = pageSize,
+            Sort = new LevelSort
+            {
+                By = "uploadTime",
+                Order = "desc"
+            }
+        };
 
-        if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+        string jsonBody = JsonConvert.SerializeObject(requestBody, Formatting.Indented);
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
+
+        Debug.Log($"[API Request] URL: {API_URL}\nBody:\n{jsonBody}");
+
+        using (var request = new UnityWebRequest(API_URL, "POST"))
         {
-            Debug.LogError($"API Error: {request.error}");
-            request.Dispose();
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"API Error: {request.error}");
+                ScrAlert.Show("加载失败: " + request.error);
+                isLoading = false;
+                ScrAlert.Hide();
+                yield break;
+            }
+
+            string responseText = request.downloadHandler.text;
+            Debug.Log($"[API Response] Status: {request.responseCode}\nBody:\n{responseText}");
+
+            var wrapper = JsonConvert.DeserializeObject<ApiResponse<LevelSearchResponse>>(responseText);
+            var response = wrapper != null ? wrapper.Data : null;
+
+            if (response != null)
+            {
+                hasMoreData = response.HasNext;
+
+                if (response.Content != null && response.Content.Count > 0)
+                {
+                    populateCoroutine = StartCoroutine(PopulateCardsAsync(response.Content, append));
+                    yield return populateCoroutine;
+                }
+                else if (!append)
+                {
+                    hasMoreData = false;
+                }
+            }
+
             isLoading = false;
-            yield break;
-        }
-
-        var response = JsonConvert.DeserializeObject<LevelSearchResponse>(request.downloadHandler.text);
-        request.Dispose();
-        
-        if (response != null)
-        {
-            totalFound = response.Found;
-            
-            if (response.Hits != null && response.Hits.Count > 0)
-            {
-                populateCoroutine = StartCoroutine(PopulateCardsAsync(response.Hits, append));
-                yield return populateCoroutine;
-                hasMoreData = cardInstances.Count < totalFound;
-            }
-            else
-            {
-                hasMoreData = false;
-            }
-        }
-
-        isLoading = false;
-        if (showAlert)
             ScrAlert.Hide();
+        }
     }
 
-    private IEnumerator PopulateCardsAsync(List<LevelHit> hits, bool append)
+    private IEnumerator PopulateCardsAsync(List<LevelSearchResultResponse> content, bool append)
     {
         if (!append)
         {
@@ -172,16 +170,14 @@ public class ScrLevelList : MonoBehaviour
         }
 
         int count = 0;
-        foreach (var hit in hits)
+        foreach (var item in content)
         {
-            if (hit.Document == null) continue;
-
             var cardObj = GetCardFromPool();
             var card = cardObj.GetComponent<ScrLevelCard>();
-            
+
             if (card != null)
             {
-                card.SetData(hit.Document);
+                card.SetData(item);
             }
 
             cardInstances.Add(cardObj);

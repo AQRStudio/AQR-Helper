@@ -22,20 +22,6 @@ public class ScrSettings : MonoBehaviour
     public AudioClip bgmClip;
     private AudioSource bgmAudioSource;
 
-    [Header("Download Source")]
-    public Button domesticButton;
-    public Button foreignButton;
-    public Color selectedColor = new Color(0.3f, 0.7f, 1f);
-    public Color unselectedColor = new Color(0.5f, 0.5f, 0.5f);
-
-    private const string PREF_KEY_USE_DOMESTIC = "UseDomesticApi";
-
-    public static bool UseDomesticApi
-    {
-        get => PlayerPrefs.GetInt(PREF_KEY_USE_DOMESTIC, 1) == 1;
-        private set => PlayerPrefs.SetInt(PREF_KEY_USE_DOMESTIC, value ? 1 : 0);
-    }
-
     [Header("Animation Settings")]
     public float animationDuration = 0.3f;
 
@@ -87,14 +73,6 @@ public class ScrSettings : MonoBehaviour
         if (bgmVolumeSlider != null)
             bgmVolumeSlider.onValueChanged.AddListener(OnVolumeChanged);
 
-        if (domesticButton != null)
-            domesticButton.onClick.AddListener(() => SetDownloadSource(true));
-
-        if (foreignButton != null)
-            foreignButton.onClick.AddListener(() => SetDownloadSource(false));
-
-        UpdateDownloadSourceButtons();
-
         // 延迟创建音频源
         if (bgmClip != null)
         {
@@ -112,30 +90,6 @@ public class ScrSettings : MonoBehaviour
         bgmAudioSource.loop = true;
         bgmAudioSource.volume = PlayerPrefs.GetFloat(PREF_KEY_BGM_VOLUME, 1f);
         bgmAudioSource.Play();
-    }
-
-    private void SetDownloadSource(bool useDomestic)
-    {
-        UseDomesticApi = useDomestic;
-        PlayerPrefs.Save();
-        UpdateDownloadSourceButtons();
-    }
-
-    private void UpdateDownloadSourceButtons()
-    {
-        if (domesticButton != null)
-        {
-            var colors = domesticButton.colors;
-            colors.normalColor = UseDomesticApi ? selectedColor : unselectedColor;
-            domesticButton.colors = colors;
-        }
-
-        if (foreignButton != null)
-        {
-            var colors = foreignButton.colors;
-            colors.normalColor = UseDomesticApi ? unselectedColor : selectedColor;
-            foreignButton.colors = colors;
-        }
     }
 
     private void OnVolumeChanged(float value)
