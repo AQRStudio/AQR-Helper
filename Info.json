@@ -1,0 +1,12 @@
+{
+  "Id": "AQRLiteHelper",
+  "DisplayName": "AQRLiteHelper",
+  "Author": "Anonymous",
+  "Version": "1.0.0",
+  "ManagerVersion": "0.27.0",
+  "Requirements": [],
+  "AssemblyName": "AQRLiteHelper.dll",
+  "EntryMethod": "AQRLiteHelper.Main.Load",
+  "HomePage": "",
+  "Repository": ""
+}

@@ -1,9 +1,0 @@
-{
-  "Id": "AQRHelper",
-  "DisplayName": "AQR Helper",
-  "Author": "AQR",
-  "Version": "1.0.0",
-  "ManagerVersion": "0.27.0",
-  "AssemblyName": "AQRHelper.dll",
-  "EntryMethod": "AQRHelper.Main.Load"
-}
