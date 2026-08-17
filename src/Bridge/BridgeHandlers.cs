@@ -9,11 +9,13 @@ namespace AQRLiteHelper.Bridge
     internal sealed class BridgeHandlers
     {
         private readonly BridgeRequestQueue _queue;
+        private readonly SseEventHub _events;
         private int _busy;
 
-        public BridgeHandlers(BridgeRequestQueue queue)
+        public BridgeHandlers(BridgeRequestQueue queue, SseEventHub events)
         {
             _queue = queue;
+            _events = events;
         }
 
         public bool IsBusy => Volatile.Read(ref _busy) == 1;
@@ -61,36 +63,87 @@ namespace AQRLiteHelper.Bridge
                 return BridgeResult.Conflict("BUSY", "已有谱面正在下载或打开，请稍后重试。");
             }
 
+            var requestId = Guid.NewGuid().ToString("N");
+            PublishProgress(requestId, request.levelId, "preparing", 0L, -1L, "正在准备下载。");
+
             try
             {
                 if (!Main.Settings.TryPrepareDownloadDirectory(out var directory))
                 {
+                    PublishProgress(requestId, request.levelId, "error", 0L, -1L, "谱面保存目录不可用。");
                     return BridgeResult.BadRequest(
                         "DOWNLOAD_DIRECTORY_INVALID",
-                        "谱面保存目录不可用，请在 Mod 设置中重新选择。");
+                        "谱面保存目录不可用，请在 Mod 设置中重新选择。",
+                        requestId);
                 }
 
                 var fileName = string.IsNullOrWhiteSpace(request.fileName)
                     ? $"level_{request.levelId}.zip"
                     : request.fileName;
+                var lastPercentage = -1;
+                var lastReportAt = DateTime.MinValue;
                 var download = await AssetDownloader.DownloadAsync(
                     request.downloadUrl,
                     directory,
                     fileName,
-                    CancellationToken.None).ConfigureAwait(false);
+                    CancellationToken.None,
+                    (loaded, total) =>
+                    {
+                        var percentage = CalculatePercentage(loaded, total);
+                        var now = DateTime.UtcNow;
+                        var shouldReport = loaded == 0L
+                            || (percentage >= 0 && percentage != lastPercentage)
+                            || now - lastReportAt >= TimeSpan.FromMilliseconds(100);
+                        if (!shouldReport)
+                        {
+                            return;
+                        }
+
+                        lastPercentage = percentage;
+                        lastReportAt = now;
+                        PublishProgress(
+                            requestId,
+                            request.levelId,
+                            "downloading",
+                            loaded,
+                            total,
+                            "正在下载谱面。");
+                    }).ConfigureAwait(false);
                 if (!download.Success)
                 {
                     Main.Mod?.Logger.Error($"关卡 {request.levelId} 下载失败：{download.Message}");
-                    return BridgeResult.Error("DOWNLOAD_FAILED", $"谱面下载失败：{download.Message}");
+                    PublishProgress(requestId, request.levelId, "error", 0L, -1L, download.Message);
+                    return BridgeResult.Error("DOWNLOAD_FAILED", $"谱面下载失败：{download.Message}", requestId);
                 }
 
-                var result = await _queue.Enqueue(() => OpenLevel(download.Path, request.levelId)).ConfigureAwait(false);
+                var resolvedLevel = LevelArchiveExtractor.ResolveLevelPath(download.Path);
+                if (!resolvedLevel.Success)
+                {
+                    Main.Mod?.Logger.Error($"关卡 {request.levelId} 解包失败：{resolvedLevel.Message}");
+                    PublishProgress(requestId, request.levelId, "error", 0L, -1L, resolvedLevel.Message);
+                    return BridgeResult.Error(
+                        "LEVEL_FILE_NOT_FOUND",
+                        $"谱面解包失败：{resolvedLevel.Message}",
+                        requestId);
+                }
+
+                PublishProgress(requestId, request.levelId, "opening", 1L, 1L, "下载完成，正在打开谱面。");
+                var result = await _queue.Enqueue(() => OpenLevel(resolvedLevel.Path, request.levelId)).ConfigureAwait(false);
+                result.requestId = requestId;
+                PublishProgress(
+                    requestId,
+                    request.levelId,
+                    result.success ? "success" : "error",
+                    1L,
+                    1L,
+                    result.message);
                 return new BridgeResult(200, result);
             }
             catch (Exception ex)
             {
                 Main.Mod?.Logger.Error($"关卡 {request.levelId} 打开失败：{ex}");
-                return BridgeResult.Error("OPEN_FAILED", "谱面打开失败，请查看游戏日志。");
+                PublishProgress(requestId, request.levelId, "error", 0L, -1L, "谱面打开失败。");
+                return BridgeResult.Error("OPEN_FAILED", "谱面打开失败，请查看游戏日志。", requestId);
             }
             finally
             {
@@ -136,7 +189,38 @@ namespace AQRLiteHelper.Bridge
             return BridgeResponse.Ok("谱面已下载，正在切换到编辑器。", "opening");
         }
 
-        private static void ApplyCors(HttpListenerResponse response, string? origin)
+        private void PublishProgress(
+            string requestId,
+            int levelId,
+            string state,
+            long loaded,
+            long total,
+            string message)
+        {
+            var progress = new LevelProgressEvent
+            {
+                requestId = requestId,
+                levelId = levelId,
+                state = state,
+                loaded = loaded,
+                total = total,
+                percentage = CalculatePercentage(loaded, total),
+                message = message ?? string.Empty
+            };
+            _events.Publish("progress", requestId, BridgeJson.Serialize(progress));
+        }
+
+        private static int CalculatePercentage(long loaded, long total)
+        {
+            if (total <= 0L)
+            {
+                return -1;
+            }
+
+            return (int)Math.Max(0L, Math.Min(100L, loaded * 100L / total));
+        }
+
+        internal static void ApplyCors(HttpListenerResponse response, string? origin)
         {
             if (!IsAllowedOrigin(origin))
             {

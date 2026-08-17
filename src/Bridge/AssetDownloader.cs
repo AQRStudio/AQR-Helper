@@ -14,7 +14,8 @@ namespace AQRLiteHelper.Bridge
             string url,
             string directory,
             string fileName,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            Action<long, long>? progress = null)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
             {
@@ -31,6 +32,8 @@ namespace AQRLiteHelper.Bridge
                 using var response = await Client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                     .ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
+                var totalBytes = response.Content.Headers.ContentLength ?? -1L;
+                progress?.Invoke(0L, totalBytes);
 
                 await using (var output = new FileStream(
                     temporaryPath,
@@ -40,7 +43,19 @@ namespace AQRLiteHelper.Bridge
                     81920,
                     useAsync: true))
                 {
-                    await response.Content.CopyToAsync(output).ConfigureAwait(false);
+                    using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                    var buffer = new byte[81920];
+                    long receivedBytes = 0;
+                    int bytesRead;
+                    while ((bytesRead = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken)
+                               .ConfigureAwait(false)) > 0)
+                    {
+                        await output.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
+                        receivedBytes += bytesRead;
+                        progress?.Invoke(receivedBytes, totalBytes);
+                    }
+
+                    progress?.Invoke(receivedBytes, totalBytes);
                 }
 
                 if (File.Exists(targetPath))

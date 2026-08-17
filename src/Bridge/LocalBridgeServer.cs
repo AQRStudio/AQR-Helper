@@ -12,6 +12,7 @@ namespace AQRLiteHelper.Bridge
         public const int FixedPort = 2770;
 
         private readonly BridgeRequestQueue _queue = new BridgeRequestQueue();
+        private readonly SseEventHub _events = new SseEventHub();
         private readonly BridgeHandlers _handlers;
         private HttpListener? _listener;
         private Thread? _workerThread;
@@ -25,7 +26,7 @@ namespace AQRLiteHelper.Bridge
 
         public LocalBridgeServer()
         {
-            _handlers = new BridgeHandlers(_queue);
+            _handlers = new BridgeHandlers(_queue, _events);
         }
 
         public int Port => FixedPort;
@@ -65,6 +66,7 @@ namespace AQRLiteHelper.Bridge
         public void Stop()
         {
             _running = false;
+            _events.Dispose();
 
             try
             {
@@ -133,6 +135,13 @@ namespace AQRLiteHelper.Bridge
                 }
 
                 var path = request.Url?.AbsolutePath?.TrimEnd('/') ?? string.Empty;
+                if (request.HttpMethod.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                    && path.Equals("/events", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _events.HandleAsync(context, origin).ConfigureAwait(false);
+                    return;
+                }
+
                 if (request.HttpMethod.Equals("GET", StringComparison.OrdinalIgnoreCase)
                     && path.Equals("/health", StringComparison.OrdinalIgnoreCase))
                 {
