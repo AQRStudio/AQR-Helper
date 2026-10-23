@@ -1,4 +1,5 @@
 using AQRLiteHelper.Bridge;
+using AQRLiteHelper.Overlay;
 using UnityModManagerNet;
 
 namespace AQRLiteHelper
@@ -33,11 +34,13 @@ namespace AQRLiteHelper
             {
                 modEntry.Logger.Log("Mod enabled / Mod 已启用");
                 StartBridge();
+                DownloadOverlay.Install();
             }
             else
             {
                 modEntry.Logger.Log("Mod disabled / Mod 已禁用");
                 StopBridge();
+                DownloadOverlay.Uninstall();
             }
 
             return true;
